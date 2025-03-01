@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Mic, Send, Settings, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -14,7 +12,6 @@ interface ChatEntry {
   content: string
   id: string
   isImproving?: boolean
-  needsApproval?: boolean
 }
 
 interface FeedbackItem {
@@ -37,7 +34,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     setMounted(true)
-    // Add welcome message
+    // Set an initial welcome message
     setChatHistory([
       {
         role: "assistant",
@@ -49,6 +46,7 @@ export default function ChatPage() {
 
   if (!mounted) return null
 
+  // Handle sending a new user message
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!message.trim()) return
@@ -59,100 +57,126 @@ export default function ChatPage() {
     await generateResponse(userEntry.content)
   }
 
+  // Simulate generating a response (replace with your actual API call if needed)
   const generateResponse = async (userMessage: string) => {
     setIsLoading(true)
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse = `Thank you for your message about "${userMessage}". I'm your personalized AI assistant, configured with your preferences. How else can I assist you?`
-      const aiEntry: ChatEntry = { role: "assistant", content: aiResponse, id: Date.now().toString() }
-      setChatHistory((prev) => [...prev, aiEntry])
-      setIsLoading(false)
-    }, 1000)
+    try {
+      const requestBody = {
+        preferences: {}, // Optionally pass preferences here
+        input: userMessage,
+      }
+
+      const response = await fetch("http://localhost:5000/generate-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        const aiEntry: ChatEntry = {
+          role: "assistant",
+          content: data.feedback,
+          id: Date.now().toString(),
+        }
+        setChatHistory((prev) => [...prev, aiEntry])
+        setFeedbackItem(aiEntry)
+      } else {
+        console.error("Error from backend:", data.error)
+      }
+    } catch (error) {
+      console.error("Fetch error:", error)
+    }
+    setIsLoading(false)
   }
 
+  // Regenerate uses the previous user message; if missing, fallback to current assistant content
   const handleRegenerate = async (entryId: string) => {
     const entryIndex = chatHistory.findIndex((entry) => entry.id === entryId)
-    if (entryIndex < 1 || chatHistory[entryIndex - 1].role !== "user") return
-
-    const userMessage = chatHistory[entryIndex - 1].content
-    setChatHistory((prev) => prev.filter((_, index) => index !== entryIndex))
-    await generateResponse(userMessage)
+    // If there's no previous user message, use the current assistant's content
+    let userMessage = chatHistory[entryIndex - 1]?.content
+    if (!userMessage || !userMessage.trim()) {
+      userMessage = chatHistory[entryIndex].content
+    }
+    setIsLoading(true)
+    try {
+      const response = await fetch("http://localhost:5000/regenerate-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          preferences: {}, // Optionally pass preferences here
+          input: userMessage,
+          feedback: "", // No feedback provided for a simple regeneration
+        }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        const newAiEntry: ChatEntry = {
+          role: "assistant",
+          content: data.feedback,
+          id: Date.now().toString(),
+        }
+        setChatHistory((prev) => [...prev, newAiEntry])
+      } else {
+        console.error("Error from backend:", data.error)
+      }
+    } catch (error) {
+      console.error("Error regenerating response:", error)
+    }
+    setIsLoading(false)
   }
 
+  // Fine-tune simply opens the feedback panel for the selected assistant message
   const handleFineTune = (entry: ChatEntry) => {
     setFeedbackItem(entry)
   }
 
-  const handleFeedbackSubmit = (feedbackItems: FeedbackItem[]) => {
+  // Handle submission of feedback from AdvancedFeedbackPanel
+  const handleFeedbackSubmit = async (feedbackItems: FeedbackItem[]) => {
     if (!feedbackItem) return
+    setIsLoading(true)
 
-    let updatedContent = feedbackItem.content
+    // Combine feedback items into one string, including userResponse
+    const feedbackString = feedbackItems
+      .map((item) => {
+        return `Annotation: ${item.highlightedText}\nComment: ${item.comment}\nUser Response: ${item.userResponse}`
+      })
+      .join("\n\n")
 
-    feedbackItems.forEach((item) => {
-      if (item.emoji === "😕" || item.emoji === "😞") {
-        updatedContent = updatedContent.replace(item.highlightedText, "[Changing this part...]")
-      }
-    })
-
-    setChatHistory((prev) =>
-      prev.map((entry) =>
-        entry.id === feedbackItem.id ? { ...entry, content: updatedContent, isImproving: true } : entry,
-      ),
-    )
-
-    setImprovingEntryId(feedbackItem.id)
-    setFeedbackItem(null)
-
-    // Simulate AI improving the response
-    setTimeout(() => {
-      const improvedContent = generateImprovedContent(feedbackItem.content, feedbackItems)
-      setChatHistory((prev) =>
-        prev.map((entry) =>
-          entry.id === feedbackItem.id
-            ? { ...entry, content: improvedContent, isImproving: false, needsApproval: true }
-            : entry,
-        ),
-      )
-    }, 2000)
-  }
-
-  const generateImprovedContent = (originalContent: string, feedbackItems: FeedbackItem[]) => {
-    let improvedContent = originalContent
-    feedbackItems.forEach((item) => {
-      const improvedText = generateImprovedText(item.highlightedText, item.emoji, item.comment)
-      improvedContent = improvedContent.replace(item.highlightedText, improvedText)
-    })
-    return improvedContent
-  }
-
-  const generateImprovedText = (originalText: string, emoji: string, comment: string) => {
-    // This is a placeholder function. In a real implementation, you would use more sophisticated
-    // natural language processing techniques to improve the text based on the feedback.
-    let improvement = originalText
-    switch (emoji) {
-      case "😊":
-        improvement += " (This part was well-received!)"
-        break
-      case "🤔":
-        improvement += " (This part was clarified based on feedback.)"
-        break
-      case "😕":
-        improvement += " (This part was revised for better understanding.)"
-        break
-      case "😞":
-        improvement += " (This part was significantly improved based on feedback.)"
-        break
-      default:
-        improvement += " (This part was updated based on feedback.)"
+    // Fallback: use the previous user message, or if empty, use the current assistant's content
+    const entryIndex = chatHistory.findIndex((entry) => entry.id === feedbackItem.id)
+    let userMessage = chatHistory[entryIndex - 1]?.content
+    if (!userMessage || !userMessage.trim()) {
+      userMessage = feedbackItem.content
     }
-    return improvement
-  }
 
-  const handleApproval = (entryId: string, isApproved: boolean) => {
-    if (isApproved) {
-      setChatHistory((prev) => prev.map((entry) => (entry.id === entryId ? { ...entry, needsApproval: false } : entry)))
-    } else {
-      handleRegenerate(entryId)
+    try {
+      const response = await fetch("http://localhost:5000/regenerate-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          preferences: {}, // Pass preferences here if needed
+          input: userMessage,
+          feedback: feedbackString,
+        }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        const improvedResponse = data.feedback
+        // Update the assistant message with the improved response
+        setChatHistory((prev) =>
+          prev.map((entry) =>
+            entry.id === feedbackItem.id ? { ...entry, content: improvedResponse, isImproving: false } : entry
+          )
+        )
+      } else {
+        console.error("Error from backend:", data.error)
+      }
+    } catch (error) {
+      console.error("Error submitting feedback:", error)
+    } finally {
+      setIsLoading(false)
+      setFeedbackItem(null)
     }
   }
 
@@ -171,7 +195,7 @@ export default function ChatPage() {
           {chatHistory.map((entry) => (
             <div key={entry.id} className="space-y-2">
               <ChatMessage role={entry.role} content={entry.content} />
-              {entry.role === "assistant" && !entry.isImproving && !entry.needsApproval && (
+              {entry.role === "assistant" && !entry.isImproving && (
                 <div className="flex space-x-2 ml-12">
                   <Button onClick={() => handleFineTune(entry)} variant="outline" size="sm" className="text-xs">
                     <Settings className="w-3 h-3 mr-1" />
@@ -184,29 +208,6 @@ export default function ChatPage() {
                 </div>
               )}
               {entry.isImproving && <div className="ml-12 text-yellow-500">Improving response...</div>}
-              {entry.needsApproval && (
-                <div className="flex items-center space-x-4 ml-12 mt-2">
-                  <span className="text-yellow-500 font-medium">Do you like the new output?</span>
-                  <div className="flex space-x-2">
-                    <Button
-                      onClick={() => handleApproval(entry.id, true)}
-                      variant="outline"
-                      size="sm"
-                      className="text-sm font-medium bg-green-600 hover:bg-green-700 text-white border-none px-4 py-2 rounded-md transition-colors duration-200"
-                    >
-                      Yes
-                    </Button>
-                    <Button
-                      onClick={() => handleApproval(entry.id, false)}
-                      variant="outline"
-                      size="sm"
-                      className="text-sm font-medium bg-red-600 hover:bg-red-700 text-white border-none px-4 py-2 rounded-md transition-colors duration-200"
-                    >
-                      No
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           ))}
           {isLoading && (
@@ -255,4 +256,3 @@ export default function ChatPage() {
     </div>
   )
 }
-

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Mic, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import ChatMessage from "@/components/chat-message"
+import ChatMessage from "@/components/chat-message" // Uses the new Markdown version
 import AdvancedFeedbackPanel from "@/components/AdvancedFeedbackPanel"
 import LoadingTransition from "@/components/LoadingTransition"
 import { usePreferencesStore } from "@/lib/store"
@@ -29,10 +29,8 @@ export default function PreviewPage() {
   const [chatHistory, setChatHistory] = useState<ChatEntry[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [feedbackItem, setFeedbackItem] = useState<ChatEntry | null>(null)
-  // State to hold feedback history as a concatenated string
   const [feedbackHistory, setFeedbackHistory] = useState("")
 
-  // Retrieve each preference individually
   const personaName = usePreferencesStore((state) => state.personaName)
   const selectedTones = usePreferencesStore((state) => state.selectedTones)
   const deliveryStyle = usePreferencesStore((state) => state.deliveryStyle)
@@ -95,7 +93,6 @@ export default function PreviewPage() {
     if (!feedbackItem) return
     setIsLoading(true)
 
-    // Create a string for this feedback submission, including userResponse
     const newFeedback = feedbackItems
       .map((item) => {
         return `Annotation: ${item.highlightedText}
@@ -104,7 +101,6 @@ User Response: ${item.userResponse}`
       })
       .join("\n\n")
 
-    // Append to the overall feedback history
     const updatedFeedbackHistory = feedbackHistory
       ? feedbackHistory + "\n\n" + newFeedback
       : newFeedback
@@ -121,7 +117,6 @@ User Response: ${item.userResponse}`
             deliveryStyle,
             additionalRequirements,
           },
-          // Use the original user input (assumed to be the message before the assistant reply)
           input: chatHistory[chatHistory.length - 2]?.content || "",
           feedback: updatedFeedbackHistory,
         }),
