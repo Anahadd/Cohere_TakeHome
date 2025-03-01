@@ -10,16 +10,16 @@ import { Card } from "@/components/ui/card"
 import { Plus, ChevronLeft, ChevronRight, X } from "lucide-react"
 
 interface AdvancedFeedbackPanelProps {
-  content: string
+  content: string                 // The original text for which we’re collecting feedback
   onSubmit: (feedbackItems: FeedbackItem[]) => void
 }
 
-interface FeedbackItem {
+export interface FeedbackItem {
   highlightedText: string
   emoji: string
   comment: string
   color: string
-  aiResponses: string[]
+  aiResponses: string[]          // We'll store exactly one clarifying question here
   userResponse: string
   isConversationComplete: boolean
 }
@@ -39,12 +39,14 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
   const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>([])
   const [currentFeedbackIndex, setCurrentFeedbackIndex] = useState(0)
 
+  // Insert the content text into the div
   useEffect(() => {
     if (contentRef.current) {
       contentRef.current.innerHTML = content
     }
   }, [content])
 
+  // Capture highlighted text from the content
   const handleHighlight = () => {
     const selection = window.getSelection()
     if (selection && !selection.isCollapsed) {
@@ -52,7 +54,8 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
     }
   }
 
-  const handleAddFeedback = () => {
+  // Add a new feedback item and ask the AI for a clarifying question
+  const handleAddFeedback = async () => {
     if (!currentHighlight || !currentEmoji) return
 
     const newFeedbackItem: FeedbackItem = {
@@ -65,21 +68,51 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
       isConversationComplete: false,
     }
 
+    // Temporarily add the item so the UI updates
     setFeedbackItems((prev) => [...prev, newFeedbackItem])
+
+    // Build a JSON object to send to /ask-followup
+    const feedbackItemPayload = {
+      highlightedText: currentHighlight,
+      emoji: currentEmoji,
+      comment: currentComment
+    }
+
+    try {
+      const response = await fetch("http://localhost:5000/ask-followup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          originalContent: content,
+          feedbackItem: feedbackItemPayload,
+          preferences: {} // Insert user preferences if needed
+        }),
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        // We have a clarifying question from the AI
+        const clarifyingQuestion = data.question
+        // Update the last item with the AI clarifying question
+        setFeedbackItems((prev) => {
+          const updated = [...prev]
+          // The newly added item is the last one
+          const lastIndex = updated.length - 1
+          updated[lastIndex].aiResponses.push(clarifyingQuestion)
+          return updated
+        })
+      } else {
+        console.error("Error from /ask-followup:", data.error)
+      }
+    } catch (error: any) {
+      console.error("Error calling /ask-followup:", error)
+    }
+
+    // Reset local states
     setCurrentHighlight("")
     setCurrentEmoji(null)
     setCurrentComment("")
     setCurrentFeedbackIndex(feedbackItems.length)
-
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse = `Here's an AI response to your feedback: "${currentComment}". How would you like me to improve this further?`
-      setFeedbackItems((prev) => {
-        const updatedItems = [...prev]
-        updatedItems[updatedItems.length - 1].aiResponses.push(aiResponse)
-        return updatedItems
-      })
-    }, 1000)
   }
 
   const handlePrevFeedback = () => {
@@ -98,12 +131,12 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
   }
 
   const handleUserResponse = (index: number, response: string) => {
-    setFeedbackItems((prev) => {
-      const newItems = prev.map((item, i) => (i === index ? { ...item, userResponse: response } : item))
-      return newItems
-    })
+    setFeedbackItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, userResponse: response } : item))
+    )
   }
 
+  // Called when user clicks "Submit All Feedback & Regenerate"
   const handleSubmitAllFeedback = () => {
     onSubmit(feedbackItems)
   }
@@ -116,12 +149,14 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
         </h2>
 
         <div className="space-y-6">
+          {/* Original Content with highlight */}
           <div
             ref={contentRef}
             className="p-4 border border-gray-700 rounded-lg bg-gray-800/50 text-lg leading-relaxed"
             onMouseUp={handleHighlight}
           />
 
+          {/* Highlighted Text */}
           <div className="space-y-3">
             <Label htmlFor="highlighted-text" className="text-lg font-medium block">
               Highlighted text:
@@ -136,6 +171,7 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
             />
           </div>
 
+          {/* Emoji-based feeling */}
           <div className="space-y-3">
             <Label className="text-lg font-medium block">How do you feel about this text?</Label>
             <div className="grid grid-cols-2 gap-3">
@@ -144,7 +180,9 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
                   key={emoji}
                   variant={currentEmoji === emoji ? "default" : "outline"}
                   onClick={() => setCurrentEmoji(emoji)}
-                  className={`text-base p-3 h-auto ${currentEmoji === emoji ? color : ""} flex items-center justify-center`}
+                  className={`text-base p-3 h-auto ${
+                    currentEmoji === emoji ? color : ""
+                  } flex items-center justify-center`}
                 >
                   <span className="text-2xl mr-2">{emoji}</span>
                   <span>{label}</span>
@@ -153,6 +191,7 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
             </div>
           </div>
 
+          {/* Comment box */}
           <div className="space-y-3">
             <Label htmlFor="comment" className="text-lg font-medium block">
               Additional comments (optional):
@@ -166,6 +205,7 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
             />
           </div>
 
+          {/* Add Feedback Item Button */}
           <Button
             onClick={handleAddFeedback}
             disabled={!currentHighlight || !currentEmoji}
@@ -174,6 +214,7 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
             <Plus className="mr-2 h-4 w-4" /> Add Feedback Item
           </Button>
 
+          {/* Feedback Item Navigator */}
           {feedbackItems.length > 0 && (
             <div className="space-y-6 mt-6">
               <div className="flex justify-between items-center">
@@ -211,6 +252,7 @@ const AdvancedFeedbackPanel: React.FC<AdvancedFeedbackPanelProps> = ({ content, 
         </div>
       </div>
 
+      {/* Submit All Feedback */}
       {feedbackItems.length > 0 && (
         <div className="p-4 border-t border-gray-800">
           <Button
@@ -232,6 +274,10 @@ interface FeedbackItemCardProps {
   handleUserResponse: (index: number, response: string) => void
 }
 
+/**
+ * Displays a single feedback item, including the AI clarifying question,
+ * user’s comment, and a userResponse field for further clarifications.
+ */
 const FeedbackItemCard: React.FC<FeedbackItemCardProps> = ({
   item,
   index,
@@ -250,6 +296,7 @@ const FeedbackItemCard: React.FC<FeedbackItemCardProps> = ({
         </Button>
       </div>
 
+      {/* Highlighted Text */}
       <div>
         <Label className="text-base font-medium block mb-1">Highlighted Text:</Label>
         <p className="text-base p-3 rounded-md text-black" style={{ backgroundColor: item.color }}>
@@ -257,6 +304,7 @@ const FeedbackItemCard: React.FC<FeedbackItemCardProps> = ({
         </p>
       </div>
 
+      {/* User’s Comment */}
       {item.comment && (
         <div>
           <Label className="text-base font-medium block mb-1">Your Comment:</Label>
@@ -264,19 +312,19 @@ const FeedbackItemCard: React.FC<FeedbackItemCardProps> = ({
         </div>
       )}
 
+      {/* AI Clarifying Question (We only store one in aiResponses[0]) */}
       {item.aiResponses.length > 0 && (
         <div>
-          <Label className="text-base font-medium block mb-1">AI Responses:</Label>
+          <Label className="text-base font-medium block mb-1">AI Clarifying Question:</Label>
           <div className="space-y-2">
-            {item.aiResponses.map((response, responseIndex) => (
-              <p key={responseIndex} className="text-base p-3 bg-purple-900/30 rounded-md">
-                {response}
-              </p>
-            ))}
+            <p className="text-base p-3 bg-purple-900/30 rounded-md">
+              {item.aiResponses[0]}
+            </p>
           </div>
         </div>
       )}
 
+      {/* User’s Additional Response */}
       <div>
         <Label htmlFor={`user-response-${index}`} className="text-base font-medium block mb-1">
           Your Response:
@@ -294,4 +342,3 @@ const FeedbackItemCard: React.FC<FeedbackItemCardProps> = ({
 )
 
 export default AdvancedFeedbackPanel
-

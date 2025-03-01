@@ -12,7 +12,6 @@ interface ChatEntry {
   role: "user" | "assistant"
   content: string
   id: string
-  needsApproval?: boolean
 }
 
 interface FeedbackItem {
@@ -33,7 +32,7 @@ export default function PreviewPage() {
   // State to hold feedback history as a concatenated string
   const [feedbackHistory, setFeedbackHistory] = useState("")
 
-  // Select each preference individually to avoid returning a new object every render
+  // Retrieve each preference individually
   const personaName = usePreferencesStore((state) => state.personaName)
   const selectedTones = usePreferencesStore((state) => state.selectedTones)
   const deliveryStyle = usePreferencesStore((state) => state.deliveryStyle)
@@ -70,12 +69,10 @@ export default function PreviewPage() {
 
       const data = await response.json()
       if (data.success) {
-        const aiResponse = data.feedback
         const aiEntry: ChatEntry = {
           role: "assistant",
-          content: aiResponse,
+          content: data.feedback,
           id: Date.now().toString(),
-          needsApproval: true,
         }
         setChatHistory((prev) => [...prev, aiEntry])
         setFeedbackItem(aiEntry)
@@ -94,31 +91,23 @@ export default function PreviewPage() {
     }
   }
 
-  const handleApproval = (entryId: string, isApproved: boolean) => {
-    if (isApproved) {
-      setChatHistory((prev) =>
-        prev.map((entry) => (entry.id === entryId ? { ...entry, needsApproval: false } : entry))
-      )
-    } else {
-      const entry = chatHistory.find((entry) => entry.id === entryId)
-      if (entry) {
-        setFeedbackItem(entry)
-      }
-    }
-  }
-
   const handleFeedbackSubmit = async (feedbackItems: FeedbackItem[]) => {
     if (!feedbackItem) return
-
     setIsLoading(true)
 
-    // Create a string for this feedback submission
+    // Create a string for this feedback submission, including userResponse
     const newFeedback = feedbackItems
-      .map((item) => `${item.highlightedText}: ${item.comment}`)
-      .join("\n")
+      .map((item) => {
+        return `Annotation: ${item.highlightedText}
+Comment: ${item.comment}
+User Response: ${item.userResponse}`
+      })
+      .join("\n\n")
 
     // Append to the overall feedback history
-    const updatedFeedbackHistory = feedbackHistory ? feedbackHistory + "\n" + newFeedback : newFeedback
+    const updatedFeedbackHistory = feedbackHistory
+      ? feedbackHistory + "\n\n" + newFeedback
+      : newFeedback
     setFeedbackHistory(updatedFeedbackHistory)
 
     try {
@@ -174,33 +163,6 @@ export default function PreviewPage() {
                 className={entry.role === "assistant" ? "cursor-pointer hover:opacity-90" : ""}
               >
                 <ChatMessage role={entry.role} content={entry.content} />
-                {entry.needsApproval && entry.role === "assistant" && (
-                  <div className="flex justify-end gap-2 mt-2">
-                    <Button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleApproval(entry.id, true)
-                      }}
-                      variant="outline"
-                      size="sm"
-                      className="text-sm font-medium bg-green-600 hover:bg-green-700 text-white border-none px-4 py-2 rounded-md transition-colors duration-200"
-                    >
-                      Yes
-                    </Button>
-                    <Button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleApproval(entry.id, false)
-                      }}
-                      variant="outline"
-                      size="sm"
-                      className="text-sm font-medium bg-red-600 hover:bg-red-700 text-white border-none px-4 py-2 rounded-md transition-colors duration-200"
-                      data-feedback="open"
-                    >
-                      No
-                    </Button>
-                  </div>
-                )}
               </div>
             ))}
             {isLoading && (
