@@ -6,7 +6,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Initialize Cohere V2 client for chat completions using your API key
-co = cohere.ClientV2('ZqrxYS8F92sgwx3pizoYDFTZM9BpVRl6BFcy98tT')
+co = cohere.ClientV2('')
 
 def format_preferences_as_context(preferences):
     """Convert preferences dict into a context string for the AI."""
