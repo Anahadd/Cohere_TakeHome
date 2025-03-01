@@ -1,13 +1,12 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { Mic, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import ChatMessage from "@/components/chat-message"
 import AdvancedFeedbackPanel from "@/components/AdvancedFeedbackPanel"
 import LoadingTransition from "@/components/LoadingTransition"
+import { usePreferencesStore } from "@/lib/store"
 
 interface ChatEntry {
   role: "user" | "assistant"
@@ -31,6 +30,14 @@ export default function PreviewPage() {
   const [chatHistory, setChatHistory] = useState<ChatEntry[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [feedbackItem, setFeedbackItem] = useState<ChatEntry | null>(null)
+  // State to hold feedback history as a concatenated string
+  const [feedbackHistory, setFeedbackHistory] = useState("")
+
+  // Select each preference individually to avoid returning a new object every render
+  const personaName = usePreferencesStore((state) => state.personaName)
+  const selectedTones = usePreferencesStore((state) => state.selectedTones)
+  const deliveryStyle = usePreferencesStore((state) => state.deliveryStyle)
+  const additionalRequirements = usePreferencesStore((state) => state.additionalRequirements)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,11 +52,22 @@ export default function PreviewPage() {
   const generateResponse = async (userMessage: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch('http://localhost:5000/generate-feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: userMessage, preferences: {} }),
+      const requestBody = {
+        preferences: {
+          personaName,
+          tones: selectedTones,
+          deliveryStyle,
+          additionalRequirements,
+        },
+        input: userMessage,
+      }
+
+      const response = await fetch("http://localhost:5000/generate-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
       })
+
       const data = await response.json()
       if (data.success) {
         const aiResponse = data.feedback
@@ -70,10 +88,17 @@ export default function PreviewPage() {
     setIsLoading(false)
   }
 
-  
+  const handleMessageClick = (entry: ChatEntry) => {
+    if (entry.role === "assistant") {
+      setFeedbackItem(entry)
+    }
+  }
+
   const handleApproval = (entryId: string, isApproved: boolean) => {
     if (isApproved) {
-      setChatHistory((prev) => prev.map((entry) => (entry.id === entryId ? { ...entry, needsApproval: false } : entry)))
+      setChatHistory((prev) =>
+        prev.map((entry) => (entry.id === entryId ? { ...entry, needsApproval: false } : entry))
+      )
     } else {
       const entry = chatHistory.find((entry) => entry.id === entryId)
       if (entry) {
@@ -87,27 +112,47 @@ export default function PreviewPage() {
 
     setIsLoading(true)
 
-    // TODO: Replace with actual API call to AI service for feedback processing
-    // const updatedContent = await processAIFeedback(feedbackItem.content, feedbackItems)
+    // Create a string for this feedback submission
+    const newFeedback = feedbackItems
+      .map((item) => `${item.highlightedText}: ${item.comment}`)
+      .join("\n")
 
-    // Simulating API call with setTimeout
-    setTimeout(() => {
-      // TODO: Remove this placeholder and use the actual AI-generated response
-      const regeneratedResponse = `This is a regenerated response based on your feedback. We've taken into account your comments and suggestions to improve this response.`
+    // Append to the overall feedback history
+    const updatedFeedbackHistory = feedbackHistory ? feedbackHistory + "\n" + newFeedback : newFeedback
+    setFeedbackHistory(updatedFeedbackHistory)
 
-      const newAiEntry: ChatEntry = {
-        role: "assistant",
-        content: regeneratedResponse,
-        id: Date.now().toString(),
+    try {
+      const response = await fetch("http://localhost:5000/regenerate-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          preferences: {
+            personaName,
+            tones: selectedTones,
+            deliveryStyle,
+            additionalRequirements,
+          },
+          // Use the original user input (assumed to be the message before the assistant reply)
+          input: chatHistory[chatHistory.length - 2]?.content || "",
+          feedback: updatedFeedbackHistory,
+        }),
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        const newAiEntry: ChatEntry = {
+          role: "assistant",
+          content: data.feedback,
+          id: Date.now().toString(),
+        }
+        setChatHistory((prev) => [...prev, newAiEntry])
       }
-
-      setChatHistory((prev) => [...prev, newAiEntry])
+    } catch (error) {
+      console.error("Error submitting feedback:", error)
+    } finally {
       setIsLoading(false)
       setFeedbackItem(null)
-    }, 1500)
-
-    // TODO: Remove this log in production
-    console.log("Feedback items:", feedbackItems)
+    }
   }
 
   return (
@@ -123,12 +168,19 @@ export default function PreviewPage() {
           {/* Chat Messages */}
           <div className="flex-1 overflow-auto space-y-6 text-xl pr-4 mb-6">
             {chatHistory.map((entry) => (
-              <div key={entry.id}>
+              <div
+                key={entry.id}
+                onClick={() => handleMessageClick(entry)}
+                className={entry.role === "assistant" ? "cursor-pointer hover:opacity-90" : ""}
+              >
                 <ChatMessage role={entry.role} content={entry.content} />
                 {entry.needsApproval && entry.role === "assistant" && (
                   <div className="flex justify-end gap-2 mt-2">
                     <Button
-                      onClick={() => handleApproval(entry.id, true)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleApproval(entry.id, true)
+                      }}
                       variant="outline"
                       size="sm"
                       className="text-sm font-medium bg-green-600 hover:bg-green-700 text-white border-none px-4 py-2 rounded-md transition-colors duration-200"
@@ -136,7 +188,10 @@ export default function PreviewPage() {
                       Yes
                     </Button>
                     <Button
-                      onClick={() => handleApproval(entry.id, false)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleApproval(entry.id, false)
+                      }}
                       variant="outline"
                       size="sm"
                       className="text-sm font-medium bg-red-600 hover:bg-red-700 text-white border-none px-4 py-2 rounded-md transition-colors duration-200"
@@ -157,7 +212,7 @@ export default function PreviewPage() {
             )}
           </div>
 
-          {/* Chat Input - Slightly higher from the bottom */}
+          {/* Chat Input */}
           <div className="mb-4 px-[1px]">
             <form onSubmit={handleSubmit} className="relative">
               <input
@@ -195,4 +250,3 @@ export default function PreviewPage() {
     </div>
   )
 }
-

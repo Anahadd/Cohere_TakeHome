@@ -22,9 +22,6 @@ def generate_feedback():
         user_preferences = data.get('preferences', {})
         user_input = data.get('input', '')
         
-        # Build the conversation messages:
-        # A system message for context based on user preferences,
-        # and a user message with their input.
         messages = [
             {
                 "role": "system",
@@ -36,13 +33,11 @@ def generate_feedback():
             }
         ]
         
-        # Call the Cohere chat endpoint
         response = co.chat(
             model="c4ai-aya-expanse-32b",
             messages=messages
         )
         
-        # Extract the assistant's reply.
         assistant_response = response.message.content[0].text.strip()
         
         return jsonify({
@@ -63,11 +58,6 @@ def regenerate_feedback():
         original_input = data.get('input', '')
         user_feedback = data.get('feedback', '')
         
-        # Build a conversation that includes:
-        # - System context with user preferences.
-        # - The original input.
-        # - The previous assistant response feedback.
-        # - A follow-up prompt requesting an improved response.
         messages = [
             {
                 "role": "system",
@@ -87,7 +77,6 @@ def regenerate_feedback():
             }
         ]
         
-        # Call the Cohere chat endpoint with the new conversation
         response = co.chat(
             model="c4ai-aya-expanse-32b",
             messages=messages

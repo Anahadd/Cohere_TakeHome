@@ -8,23 +8,44 @@ import { Button } from "@/components/ui/button"
 import { Check } from "lucide-react"
 import { InfoTooltip } from "@/components/InfoTooltip"
 import { useRouter } from "next/navigation"
+import { usePreferencesStore } from "@/lib/store"
 
 export default function PreferencesPage() {
   const router = useRouter()
-  const [selectedTones, setSelectedTones] = useState<string[]>([])
-  const [deliveryStyle, setDeliveryStyle] = useState<string | null>("bullet")
+  // Local state for form inputs
+  const [localPersonaName, setLocalPersonaName] = useState("")
+  const [localSelectedTones, setLocalSelectedTones] = useState<string[]>([])
+  const [localDeliveryStyle, setLocalDeliveryStyle] = useState<string | null>("bullet")
+  const [localAdditionalRequirements, setLocalAdditionalRequirements] = useState("")
+
+  // Get update functions from the global store
+  const setPersonaName = usePreferencesStore((state) => state.setPersonaName)
+  const setSelectedTones = usePreferencesStore((state) => state.setSelectedTones)
+  const setDeliveryStyle = usePreferencesStore((state) => state.setDeliveryStyle)
+  const setAdditionalRequirements = usePreferencesStore((state) => state.setAdditionalRequirements)
 
   const toggleTone = (tone: string) => {
-    setSelectedTones((prev) => (prev.includes(tone) ? prev.filter((t) => t !== tone) : [...prev, tone]))
+    setLocalSelectedTones((prev) =>
+      prev.includes(tone) ? prev.filter((t) => t !== tone) : [...prev, tone]
+    )
   }
 
   const toggleDeliveryStyle = (style: string) => {
-    setDeliveryStyle((prev) => (prev === style ? null : style))
+    setLocalDeliveryStyle((prev) => (prev === style ? null : style))
   }
 
   const handleUpdate = () => {
-    // Here you would typically send the preferences to your backend
-    console.log("Updating preferences...")
+    // Update the global store with local form values
+    setPersonaName(localPersonaName)
+    setSelectedTones(localSelectedTones)
+    setDeliveryStyle(localDeliveryStyle)
+    setAdditionalRequirements(localAdditionalRequirements)
+    console.log("Preferences updated:", {
+      personaName: localPersonaName,
+      selectedTones: localSelectedTones,
+      deliveryStyle: localDeliveryStyle,
+      additionalRequirements: localAdditionalRequirements,
+    })
     // Navigate to the preview page
     router.push("/preview")
   }
@@ -43,6 +64,8 @@ export default function PreferencesPage() {
           id="persona-name"
           placeholder="Enter your AI Persona's Name"
           className="bg-gray-800/50 border-gray-700 text-white text-lg h-16 px-4"
+          value={localPersonaName}
+          onChange={(e) => setLocalPersonaName(e.target.value)}
         />
       </div>
 
@@ -56,49 +79,49 @@ export default function PreferencesPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           <ToneButton
             tone="Concise"
-            selected={selectedTones.includes("Concise")}
+            selected={localSelectedTones.includes("Concise")}
             onClick={() => toggleTone("Concise")}
             className="bg-teal-500/20 text-teal-300 hover:bg-teal-500/30"
           />
           <ToneButton
             tone="Educational"
-            selected={selectedTones.includes("Educational")}
+            selected={localSelectedTones.includes("Educational")}
             onClick={() => toggleTone("Educational")}
             className="bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
           />
           <ToneButton
             tone="Conversational"
-            selected={selectedTones.includes("Conversational")}
+            selected={localSelectedTones.includes("Conversational")}
             onClick={() => toggleTone("Conversational")}
             className="bg-rose-500/20 text-rose-300 hover:bg-rose-500/30"
           />
           <ToneButton
             tone="Professional"
-            selected={selectedTones.includes("Professional")}
+            selected={localSelectedTones.includes("Professional")}
             onClick={() => toggleTone("Professional")}
             className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
           />
           <ToneButton
             tone="Friendly"
-            selected={selectedTones.includes("Friendly")}
+            selected={localSelectedTones.includes("Friendly")}
             onClick={() => toggleTone("Friendly")}
             className="bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30"
           />
           <ToneButton
             tone="Technical"
-            selected={selectedTones.includes("Technical")}
+            selected={localSelectedTones.includes("Technical")}
             onClick={() => toggleTone("Technical")}
             className="bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30"
           />
           <ToneButton
             tone="Casual"
-            selected={selectedTones.includes("Casual")}
+            selected={localSelectedTones.includes("Casual")}
             onClick={() => toggleTone("Casual")}
             className="bg-green-500/20 text-green-300 hover:bg-green-500/30"
           />
           <ToneButton
             tone="Formal"
-            selected={selectedTones.includes("Formal")}
+            selected={localSelectedTones.includes("Formal")}
             onClick={() => toggleTone("Formal")}
             className="bg-pink-500/20 text-pink-300 hover:bg-pink-500/30"
           />
@@ -119,21 +142,21 @@ export default function PreferencesPage() {
             value="bullet"
             label="Bullet Points"
             description="For lists and quick facts"
-            selected={deliveryStyle === "bullet"}
+            selected={localDeliveryStyle === "bullet"}
             onClick={() => toggleDeliveryStyle("bullet")}
           />
           <DeliveryStyleButton
             value="narrative"
             label="Narrative Style"
             description="For more detailed explanations"
-            selected={deliveryStyle === "narrative"}
+            selected={localDeliveryStyle === "narrative"}
             onClick={() => toggleDeliveryStyle("narrative")}
           />
           <DeliveryStyleButton
             value="hybrid"
             label="Hybrid"
             description="A mix of both"
-            selected={deliveryStyle === "hybrid"}
+            selected={localDeliveryStyle === "hybrid"}
             onClick={() => toggleDeliveryStyle("hybrid")}
           />
         </div>
@@ -151,6 +174,8 @@ export default function PreferencesPage() {
           id="requirements"
           className="min-h-[250px] bg-gray-800/50 border-gray-700 text-white text-lg resize-none p-4"
           placeholder="Add any additional requirements or preferences..."
+          value={localAdditionalRequirements}
+          onChange={(e) => setLocalAdditionalRequirements(e.target.value)}
         />
       </div>
 
@@ -167,7 +192,7 @@ export default function PreferencesPage() {
   )
 }
 
-function DeliveryStyleButton({ value, label, description, selected, onClick }) {
+function DeliveryStyleButton({ value, label, description, selected, onClick }: { value: string; label: string; description: string; selected: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -187,17 +212,7 @@ function DeliveryStyleButton({ value, label, description, selected, onClick }) {
   )
 }
 
-function ToneButton({
-  tone,
-  selected,
-  onClick,
-  className,
-}: {
-  tone: string
-  selected: boolean
-  onClick: () => void
-  className: string
-}) {
+function ToneButton({ tone, selected, onClick, className }: { tone: string; selected: boolean; onClick: () => void; className: string }) {
   return (
     <button
       onClick={onClick}
@@ -209,4 +224,3 @@ function ToneButton({
     </button>
   )
 }
-
