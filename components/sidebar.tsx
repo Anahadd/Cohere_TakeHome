@@ -3,7 +3,7 @@
 import type React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Settings, MessageCircle } from "lucide-react"
+import { Home, Settings, MessageCircle, ShieldCheck } from "lucide-react"
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -27,6 +27,12 @@ export default function Sidebar() {
           label="Chat"
           href="/chat"
           active={pathname.startsWith("/chat")}
+        />
+        <SidebarItem
+          icon={<ShieldCheck size={24} />}
+          label="Admin"
+          href="/admin"
+          active={pathname.startsWith("/admin")}
         />
       </div>
     </div>

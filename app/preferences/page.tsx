@@ -1,28 +1,44 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import { Check } from "lucide-react"
+import { Check, Loader2 } from "lucide-react"
 import { InfoTooltip } from "@/components/InfoTooltip"
 import { useRouter } from "next/navigation"
 import { usePreferencesStore } from "@/lib/store"
+import { toast } from "sonner"
 
 export default function PreferencesPage() {
   const router = useRouter()
-  // Local state for form inputs
-  const [localPersonaName, setLocalPersonaName] = useState("")
-  const [localSelectedTones, setLocalSelectedTones] = useState<string[]>([])
-  const [localDeliveryStyle, setLocalDeliveryStyle] = useState<string | null>("bullet")
-  const [localAdditionalRequirements, setLocalAdditionalRequirements] = useState("")
-
-  // Get update functions from the global store
+  const [isSaving, setIsSaving] = useState(false)
+  
+  // Get values and update functions from the global store
+  const personaName = usePreferencesStore((state) => state.personaName)
+  const selectedTones = usePreferencesStore((state) => state.selectedTones)
+  const deliveryStyle = usePreferencesStore((state) => state.deliveryStyle)
+  const additionalRequirements = usePreferencesStore((state) => state.additionalRequirements)
+  
   const setPersonaName = usePreferencesStore((state) => state.setPersonaName)
   const setSelectedTones = usePreferencesStore((state) => state.setSelectedTones)
   const setDeliveryStyle = usePreferencesStore((state) => state.setDeliveryStyle)
   const setAdditionalRequirements = usePreferencesStore((state) => state.setAdditionalRequirements)
+
+  // Local state for form inputs
+  const [localPersonaName, setLocalPersonaName] = useState(personaName || "")
+  const [localSelectedTones, setLocalSelectedTones] = useState<string[]>(selectedTones || [])
+  const [localDeliveryStyle, setLocalDeliveryStyle] = useState<string | null>(deliveryStyle || "bullet")
+  const [localAdditionalRequirements, setLocalAdditionalRequirements] = useState(additionalRequirements || "")
+
+  // Load values from store when component mounts
+  useEffect(() => {
+    setLocalPersonaName(personaName || "")
+    setLocalSelectedTones(selectedTones || [])
+    setLocalDeliveryStyle(deliveryStyle || "bullet")
+    setLocalAdditionalRequirements(additionalRequirements || "")
+  }, [personaName, selectedTones, deliveryStyle, additionalRequirements])
 
   const toggleTone = (tone: string) => {
     setLocalSelectedTones((prev) =>
@@ -34,20 +50,49 @@ export default function PreferencesPage() {
     setLocalDeliveryStyle((prev) => (prev === style ? null : style))
   }
 
-  const handleUpdate = () => {
-    // Update the global store with local form values
-    setPersonaName(localPersonaName)
-    setSelectedTones(localSelectedTones)
-    setDeliveryStyle(localDeliveryStyle)
-    setAdditionalRequirements(localAdditionalRequirements)
-    console.log("Preferences updated:", {
-      personaName: localPersonaName,
-      selectedTones: localSelectedTones,
-      deliveryStyle: localDeliveryStyle,
-      additionalRequirements: localAdditionalRequirements,
-    })
-    // Navigate to the preview page
-    router.push("/preview")
+  const handleUpdate = async () => {
+    if (!localPersonaName.trim()) {
+      toast.error("Please enter a name for your AI persona")
+      return
+    }
+    
+    setIsSaving(true)
+    
+    try {
+      // Update the global store with local form values
+      setPersonaName(localPersonaName)
+      setSelectedTones(localSelectedTones)
+      setDeliveryStyle(localDeliveryStyle)
+      setAdditionalRequirements(localAdditionalRequirements)
+      
+      // Sync with MongoDB
+      const response = await fetch('/api/sync-preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personaName: localPersonaName,
+          selectedTones: localSelectedTones,
+          deliveryStyle: localDeliveryStyle,
+          additionalRequirements: localAdditionalRequirements,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to sync preferences with database');
+      }
+      
+      toast.success("Preferences updated and saved to database")
+      
+      // Navigate to the preview page
+      router.push("/preview")
+    } catch (error) {
+      console.error("Error updating preferences:", error)
+      toast.error("Failed to save preferences to database")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -132,10 +177,11 @@ export default function PreferencesPage() {
       <div className="space-y-6">
         <div className="flex items-center">
           <Label className="text-2xl text-white font-semibold mr-2">Delivery Style Options</Label>
-          <InfoTooltip
-            content="Choose how you want information presented. This affects how the AI structures its responses to best suit your preferences."
-            className="mt-1"
-          />
+          <div className="mt-1">
+            <InfoTooltip
+              content="Choose how you want information presented. This affects how the AI structures its responses to best suit your preferences."
+            />
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <DeliveryStyleButton
@@ -183,9 +229,17 @@ export default function PreferencesPage() {
       <div className="pt-8">
         <Button
           onClick={handleUpdate}
-          className="w-full bg-purple-600 hover:bg-purple-700 text-white text-xl font-semibold py-6 rounded-xl transition-colors"
+          disabled={isSaving}
+          className="w-full bg-purple-600 hover:bg-purple-700 text-white text-xl font-semibold py-6 rounded-xl transition-colors disabled:opacity-70"
         >
-          Update Preferences
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            "Update Preferences"
+          )}
         </Button>
       </div>
     </div>

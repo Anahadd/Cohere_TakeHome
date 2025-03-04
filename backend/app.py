@@ -6,7 +6,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Initialize Cohere V2 client for chat completions using your API key
-co = cohere.ClientV2('ZqrxYS8F92sgwx3pizoYDFTZM9BpVRl6BFcy98tT')
+co = cohere.ClientV2('')
 
 def format_preferences_as_context(preferences):
     """Convert preferences dict into a context string for the AI."""
@@ -34,11 +34,19 @@ def generate_feedback():
         data = request.json
         user_preferences = data.get('preferences', {})
         user_input = data.get('input', '')
+        context = data.get('context', '')
+        use_context = data.get('useContext', False)
+        
+        system_content = format_preferences_as_context(user_preferences)
+        
+        # Add file context if provided
+        if use_context and context:
+            system_content += f"\n\nUse the following context to inform your response:\n{context}"
         
         messages = [
             {
                 "role": "system",
-                "content": format_preferences_as_context(user_preferences)
+                "content": system_content
             },
             {
                 "role": "user",
@@ -74,11 +82,19 @@ def regenerate_feedback():
         user_preferences = data.get('preferences', {})
         original_input = data.get('input', '')
         user_feedback = data.get('feedback', '')
+        context = data.get('context', '')
+        use_context = data.get('useContext', False)
+        
+        system_content = format_preferences_as_context(user_preferences)
+        
+        # Add file context if provided
+        if use_context and context:
+            system_content += f"\n\nUse the following context to inform your response:\n{context}"
         
         messages = [
             {
                 "role": "system",
-                "content": format_preferences_as_context(user_preferences)
+                "content": system_content
             },
             {
                 "role": "user",
@@ -124,13 +140,21 @@ def ask_followup():
         feedback_item = data.get('feedbackItem', {})
         # The actual content the user is giving feedback on.
         original_content = data.get('originalContent', '')
+        context = data.get('context', '')
+        use_context = data.get('useContext', False)
+        
+        system_content = format_preferences_as_context(user_preferences)
+        
+        # Add file context if provided
+        if use_context and context:
+            system_content += f"\n\nUse the following context to inform your response:\n{context}"
 
         # Build a conversation to produce a single clarifying question.
         # We combine system context, the original content, and the user's feedback item.
         messages = [
             {
                 "role": "system",
-                "content": format_preferences_as_context(user_preferences)
+                "content": system_content
             },
             {
                 "role": "assistant",
